@@ -69,29 +69,34 @@ async function requestRandomnessOnBase(gameId) {
  
 function listenForResultsOnBase() {
     console.log(`👂 Listening for 'RandomnessFulfilled' events on Base Sepolia (via WebSocket)...`);
-    baseSepoliaPublicClient.watchContractEvent({
-        address: vrfRequesterAddress,
-        abi: vrfRequesterAbi,
-        eventName: 'RandomnessFulfilled',
-        onLogs: async (logs) => {
-            for (const log of logs) {
-                const { gameId, randomWords } = log.args;
-                const randomNumber = randomWords[0];
-                console.log(`
+    let unwatch;
+
+    const startListener = () => {
+        unwatch = baseSepoliaPublicClient.watchContractEvent({
+            address: vrfRequesterAddress,
+            abi: vrfRequesterAbi,
+            eventName: 'RandomnessFulfilled',
+            onLogs: async (logs) => {
+                for (const log of logs) {
+                    const { gameId, randomWords } = log.args;
+                    const randomNumber = randomWords[0];
+                    console.log(`
 🎲 [BASE EVENT] RandomnessFulfilled`);
-                console.log(`  - Game ID: ${gameId}`);
-                console.log(`  - Random Word: ${randomNumber}`);
-                await settleGameOnMorph(gameId, randomNumber);
+                    console.log(`  - Game ID: ${gameId}`);
+                    console.log(`  - Random Word: ${randomNumber}`);
+                    await settleGameOnMorph(gameId, randomNumber);
+                }
+            },
+            onError: (error) => {
+                console.error("❌ Base Listener Error. The WebSocket connection may have been dropped.", error);
+                console.log("🔌 Attempting to reconnect in 5 seconds...");
+                if (unwatch) unwatch(); // Stop the old listener
+                setTimeout(startListener, 5000); // Reconnect
             }
-        },
-        onError: (error) => {
-            console.error("❌ Base Listener Error:", error.name);
-            if (error.name === 'SocketClosedError') {
-                console.log("🔌 WebSocket closed. Attempting to reconnect in 5 seconds...");
-                setTimeout(listenForResultsOnBase, 5000);
-            }
-        }
-    });
+        });
+    };
+
+    startListener();
 }
 
 

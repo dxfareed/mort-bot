@@ -18,7 +18,7 @@
       },
       {
         "internalType": "address",
-        "name": "_initialOwner",
+        "name": "_admin",
         "type": "address"
       }
     ],
@@ -145,32 +145,6 @@
   },
   {
     "inputs": [],
-    "name": "NUM_WORDS",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "REQUEST_CONFIRMATIONS",
-    "outputs": [
-      {
-        "internalType": "uint16",
-        "name": "",
-        "type": "uint16"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -242,6 +216,19 @@
       }
     ],
     "name": "requestRandomness",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestRanmiNumbers",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

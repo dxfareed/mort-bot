@@ -15,7 +15,7 @@ const morphHoleskyUrl = process.env.MORPH_RPC_URL;
 const playerPrivateKey = process.env.RELAYER_PRIVATE_KEY;
 
 const flipGameAddress = "0x8A768deEC38363C60477A7046FD4e3236b98a3b0";
-const vrfRequesterAddress = "0x7EEFC42b510dF33097a8AC5EFE9533494ABcA78B"; 
+const vrfRequesterAddress = "0x7EEFC42b510dF33097a8AC5EFE9533494ABcA78B";
 
 const BET_AMOUNT = "0.0001";
 const PLAYER_CHOICE = 1;
@@ -62,7 +62,7 @@ Player Address: ${account.address}`);
                 console.log(`- Decoded event: ${decodedEvent.eventName}`, decodedEvent.args);
                 if (decodedEvent.eventName === 'FlipInitiated') {
                     gameId = decodedEvent.args.gameId;
-                   // console.log(`   -> Found FlipInitiated! Game ID: ${gameId}`);
+                    // console.log(`   -> Found FlipInitiated! Game ID: ${gameId}`);
                     break;
                 }
             } catch (e) {
@@ -100,7 +100,7 @@ Player Address: ${account.address}`);
                     console.log(`  - Game ID: ${event.gameId}`);
                     console.log(`  - Result:  You ${event.won ? 'WON! 🎉' : 'lost. 😢'}`);
                     console.log(`  - Payout:  ${formatEther(event.payout)} ETH`);
-                    
+
                     console.log("\n--- Post-Game State ---");
                     const finalBalance = await publicClient.getBalance({ address: account.address });
                     const houseBalance = await publicClient.readContract({
@@ -111,7 +111,7 @@ Player Address: ${account.address}`);
 
                     console.log(`👤 Your Final Balance:   ${formatEther(finalBalance)} ETH`);
                     console.log(`🏠 House Balance:        ${formatEther(houseBalance)} ETH`);
-                    
+
                     resolve();
                 },
                 onError: reject
