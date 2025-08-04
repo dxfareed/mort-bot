@@ -9,19 +9,22 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { morphHolesky } from "./chains.js";
 import 'dotenv/config';
-import flipGameAbi from './flipGameAbi.json' with { type: 'json' };
+import rpsGameAbi from './rpsGameAbi.json' with { type: 'json' };
 
 const morphHoleskyUrl = process.env.MORPH_RPC_URL;
 const playerPrivateKey = process.env.RELAYER_PRIVATE_KEY;
 
-const flipGameAddress = "0x8A768deEC38363C60477A7046FD4e3236b98a3b0";
-const vrfRequesterAddress = "0x7EEFC42b510dF33097a8AC5EFE9533494ABcA78B"; 
+const rpsGameAddress = "0xfE5338B161b3B02FC03CF854F91bdC7A353061C0";
 
 const BET_AMOUNT = "0.0001";
-const PLAYER_CHOICE = 1;
+// 0 = Rock, 1 = Paper, 2 = Scissor
+const PLAYER_CHOICE = 0; 
 
-async function playGameWithViem() {
-    console.log("--- Player Script: Full Game Report ---");
+const choiceMap = { 0: 'Rock', 1: 'Paper', 2: 'Scissor' };
+const outcomeMap = { 0: 'You WON! 🎉', 1: 'You LOST. 😢', 2: 'It\'s a DRAW. 🤝' };
+
+async function playRpsGame() {
+    console.log("--- RPS Player Script ---");
     if (!morphHoleskyUrl || !playerPrivateKey) throw new Error("Missing config in .env file.");
 
     const account = privateKeyToAccount(`0x${playerPrivateKey.replace(/^0x/, '')}`);
@@ -38,14 +41,14 @@ Player Address: ${account.address}`);
         const initialBalance = await publicClient.getBalance({ address: account.address });
         console.log(`👤 Your Initial Balance: ${formatEther(initialBalance)} ETH`);
         console.log(`💰 Bet Amount:           ${BET_AMOUNT} ETH`);
-        console.log(`🤔 Your Choice:          ${PLAYER_CHOICE === 0 ? 'Heads' : 'Tails'}`);
+        console.log(`🤔 Your Choice:          ${choiceMap[PLAYER_CHOICE]}`);
 
-        // --- PHASE 2: INITIATE FLIP ---
-        console.log("\n[ACTION] Calling flip()...");
+        // --- PHASE 2: INITIATE GAME ---
+        console.log("\n[ACTION] Calling play()...");
         const txHash = await walletClient.writeContract({
-            address: flipGameAddress,
-            abi: flipGameAbi,
-            functionName: 'flip',
+            address: rpsGameAddress,
+            abi: rpsGameAbi,
+            functionName: 'play',
             args: [PLAYER_CHOICE],
             value: parseEther(BET_AMOUNT)
         });
@@ -53,33 +56,22 @@ Player Address: ${account.address}`);
         const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
         if (receipt.status !== 'success') throw new Error("Transaction failed on-chain.");
 
-        //console.log("\n--- Debugging Events ---");
-        //console.log(`Found ${receipt.logs.length} logs in the transaction receipt.`);
         let gameId;
         for (const log of receipt.logs) {
             try {
-                const decodedEvent = decodeEventLog({ abi: flipGameAbi, ...log });
-                console.log(`- Decoded event: ${decodedEvent.eventName}`, decodedEvent.args);
-                if (decodedEvent.eventName === 'FlipInitiated') {
+                const decodedEvent = decodeEventLog({ abi: rpsGameAbi, ...log });
+                if (decodedEvent.eventName === 'GamePlayed') {
                     gameId = decodedEvent.args.gameId;
-                   // console.log(`   -> Found FlipInitiated! Game ID: ${gameId}`);
                     break;
                 }
-            } catch (e) {
-                console.log("- Could not decode an event. Details:", {
-                    address: log.address,
-                    topics: log.topics,
-                    data: log.data,
-                });
-            }
+            } catch {} // Ignore errors during decoding, as not all logs will be relevant
         }
-        //console.log("--- End Debugging ---");
-
-        if (!gameId) throw new Error("Could not find 'FlipInitiated' event.");
+        if (!gameId) throw new Error("Could not find 'GamePlayed' event.");
 
         console.log(`[SUCCESS] Game initiated! Your Game ID is: ${gameId}`);
-        console.log("\n[WAITING] Waiting for the relayer to settle the game... (This can take a few minutes)");
+        console.log("\n[WAITING] Waiting for the relayer to settle the game...");
 
+        // --- PHASE 3: AWAIT RESULT ---
         await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 unwatch();
@@ -87,9 +79,9 @@ Player Address: ${account.address}`);
             }, 300000);
 
             const unwatch = publicClient.watchContractEvent({
-                address: flipGameAddress,
-                abi: flipGameAbi,
-                eventName: 'FlipSettled',
+                address: rpsGameAddress,
+                abi: rpsGameAbi,
+                eventName: 'GameResult',
                 args: { gameId, player: account.address },
                 onLogs: async (logs) => {
                     clearTimeout(timeout);
@@ -98,19 +90,14 @@ Player Address: ${account.address}`);
 
                     console.log("\n--- ✅ FINAL RESULT RECEIVED ---");
                     console.log(`  - Game ID: ${event.gameId}`);
-                    console.log(`  - Result:  You ${event.won ? 'WON! 🎉' : 'lost. 😢'}`);
-                    console.log(`  - Payout:  ${formatEther(event.payout)} ETH`);
+                    console.log(`  - You Chose:      ${choiceMap[event.playerChoice]}`);
+                    console.log(`  - Computer Chose: ${choiceMap[event.computerChoice]}`);
+                    console.log(`  - Result:         ${outcomeMap[event.outcome]}`);
+                    console.log(`  - Payout:         ${formatEther(event.prizeAmount)} ETH`);
                     
                     console.log("\n--- Post-Game State ---");
                     const finalBalance = await publicClient.getBalance({ address: account.address });
-                    const houseBalance = await publicClient.readContract({
-                        address: flipGameAddress,
-                        abi: flipGameAbi,
-                        functionName: 'getHouseBalance'
-                    });
-
-                    console.log(`👤 Your Final Balance:   ${formatEther(finalBalance)} ETH`);
-                    console.log(`🏠 House Balance:        ${formatEther(houseBalance)} ETH`);
+                    console.log(`👤 Your Final Balance: ${formatEther(finalBalance)} ETH`);
                     
                     resolve();
                 },
@@ -125,4 +112,4 @@ Player Address: ${account.address}`);
     }
 }
 
-playGameWithViem();
+playRpsGame();
