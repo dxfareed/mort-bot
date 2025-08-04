@@ -27,7 +27,7 @@ async function main() {
     VRF_COORDINATOR,
     KEY_HASH,
     SUB_ID,
-    deployer.address
+    "0x52c043C7120d7DA35fFdDF6C5c2359d503ceE5F8"
   );
 
   await vrfRequester.waitForDeployment();

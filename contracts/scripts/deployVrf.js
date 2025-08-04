@@ -15,7 +15,7 @@ async function main() {
     throw new Error("Please set VRF_COORDINATOR, KEY_HASH, and SUB_ID in your .env file");
   }
 
-  const VrfRequester = await hre.ethers.getContractFactory("VrfRequester");
+    const VrfRequester = await hre.ethers.getContractFactory("contracts/vrf.sol:VrfRequester");
 
   // The constructor for VrfRequester takes four arguments:
   // 1. address vrfCoordinator: The address of the Chainlink VRF Coordinator on Base Sepolia.
@@ -26,7 +26,7 @@ async function main() {
     VRF_COORDINATOR,
     KEY_HASH,
     SUB_ID,
-    deployer.address
+    "0x52c043C7120d7DA35fFdDF6C5c2359d503ceE5F8"
   );
 
   await vrfRequester.waitForDeployment();

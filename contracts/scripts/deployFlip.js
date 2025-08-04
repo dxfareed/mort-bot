@@ -11,7 +11,7 @@ async function main() {
   const FlipGame = await hre.ethers.getContractFactory("FlipGame");
   // The constructor for FlipGame takes one argument: the initial owner address.
   // This will also be the initial trustedRelayer.
-  const flipGame = await FlipGame.deploy(deployer.address);
+  const flipGame = await FlipGame.deploy("0x52c043C7120d7DA35fFdDF6C5c2359d503ceE5F8");
 
   await flipGame.waitForDeployment();
 

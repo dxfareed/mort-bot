@@ -11,7 +11,7 @@ async function main() {
   const RanmiGame = await hre.ethers.getContractFactory("RanmiGame");
   // The constructor for RanmiGame takes one argument: the trusted relayer address.
   // We are using the deployer's address as the initial relayer.
-  const ranmiGame = await RanmiGame.deploy(deployer.address);
+  const ranmiGame = await RanmiGame.deploy("0x52c043C7120d7DA35fFdDF6C5c2359d503ceE5F8");
 
   await ranmiGame.waitForDeployment();
 
