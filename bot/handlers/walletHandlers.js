@@ -1,0 +1,114 @@
+import { sendMessage, sendTransactionSuccessMessage } from "../services/whatsappService.js";
+import { userStates } from "../index.js";
+import { getUserByUsername } from "../services/databaseService.js";
+import { createViemAccount } from '@privy-io/server-auth/viem';
+import { createWalletClient, http, parseEther, formatEther, createPublicClient } from 'viem';
+import { morphHolesky } from '../config/chains.js';
+import { privy } from '../config/firebase.js';
+import { fetchEthPrice } from "../utils/api.js";
+import bcrypt from "bcrypt";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../config/firebase.js";
+import axios from 'axios';
+
+export async function handleSendCrypto(userPhoneNumber, user) {
+    userStates.set(userPhoneNumber, { type: 'awaiting_transaction', user: user });
+    try {
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { messaging_product: "whatsapp", to: userPhoneNumber, type: "interactive", interactive: { type: "button", body: { text: " *Send Crypto*\nPlease enter the transaction details in one of these formats:\n\n`send [amount] to [address]`\n`send [amount] to [username]`" }, action: { buttons: [{ type: "reply", reply: { id: "cancel_operation", title: "❌ Cancel" } }] } } }
+        });
+    } catch (error) {
+        console.error("❌ Error sending send crypto prompt:", error.response?.data || error.message);
+        await sendMessage(userPhoneNumber, " Send Crypto\nPlease enter in this format: 'send [amount] to [address]'\n\n(Reply with 'cancel' to exit)");
+    }
+}
+
+export async function handleReceiveCrypto(userPhoneNumber, user) {
+    await sendMessage(userPhoneNumber, user.wallet.primaryAddress);
+    await sendMessage(userPhoneNumber, ` Send ETH to this address on the Morph Holesky network.`);
+    setTimeout(() => sendMainMenu(userPhoneNumber, user), 2000);
+}
+
+export async function handleViewBalance(userPhoneNumber, user) {
+    try {
+        const price = await fetchEthPrice();
+        await sendMessage(userPhoneNumber, " Checking your balance...");
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(process.env.MORPH_RPC_URL) });
+        const balance = await publicClient.getBalance({ address: user.wallet.primaryAddress });
+        const user_bal = Number(formatEther(balance)).toFixed(3);
+        await sendMessage(userPhoneNumber, ` Wallet Balance\nETH: ${user_bal}\n$${(parseFloat(user_bal) * price).toFixed(2)}`);
+        setTimeout(() => sendMainMenu(userPhoneNumber, user), 2000);
+    } catch (error) {
+        console.error("❌ Error fetching balance:", error);
+        await sendMessage(userPhoneNumber, "❌ Sorry, I couldn't fetch your balance right now.");
+    }
+}
+
+export async function handleTransactionInput(userPhoneNumber, userText, user) {
+    const regex = /send\s+([\d.]+)\s+to\s+(0x[a-fA-F0-9]{40}|[a-zA-Z0-9_]{3,20})/i;
+    const match = userText.match(regex);
+    if (!match) {
+        await sendMessage(userPhoneNumber, "❌ Invalid format. Please use:\n`send [amount] to [address]` or\n`send [amount] to [username]`");
+        return;
+    }
+    const [_, amount, recipient] = match;
+    let toAddress;
+    let recipientIdentifier = recipient;
+    if (/^0x[a-fA-F0-9]{40}$/i.test(recipient)) {
+        toAddress = recipient;
+        if (toAddress.toLowerCase() === user.wallet.primaryAddress.toLowerCase()) {
+            await sendMessage(userPhoneNumber, "❌ You cannot send crypto to yourself.");
+            return;
+        }
+    } else {
+        const recipientUser = await getUserByUsername(recipient);
+        if (!recipientUser) {
+            await sendMessage(userPhoneNumber, `❌ User "${recipient}" not found. Please check the username and try again.`);
+            return;
+        }
+        if (recipientUser.whatsappId === userPhoneNumber) {
+            await sendMessage(userPhoneNumber, "❌ You cannot send crypto to yourself.");
+            return;
+        }
+        toAddress = recipientUser.wallet.primaryAddress;
+        recipientIdentifier = `${recipientUser.username} (${toAddress.substring(0, 6)}...${toAddress.substring(38)})`;
+    }
+    userStates.set(userPhoneNumber, { type: 'awaiting_pin_for_transaction', user: user, transaction: { amount, toAddress } });
+    try {
+        const bodyText = ` *Confirm Transaction*\n\n*Amount:* ${amount} ETH\n*To:* ${recipientIdentifier}\n\nPlease enter your PIN to confirm.`;
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { messaging_product: "whatsapp", to: userPhoneNumber, type: "interactive", interactive: { type: "button", body: { text: bodyText }, action: { buttons: [{ type: "reply", reply: { id: "cancel_operation", title: "❌ Cancel" } }] } } }
+        });
+    } catch (error) {
+        console.error("❌ Error sending PIN prompt:", error.response?.data || error.message);
+        await sendMessage(userPhoneNumber, ` Confirm Transaction\n Amount: ${amount} ETH\nTo: ${recipientIdentifier}\n\nEnter your PIN:`);
+    }
+}
+
+export async function handlePinForTransaction(userPhoneNumber, enteredPin, userState) {
+    const { user, transaction } = userState;
+    const isValidPin = await bcrypt.compare(enteredPin, user.security.hashedPin);
+    if (!isValidPin) {
+        await sendMessage(userPhoneNumber, "❌ Incorrect PIN. Transaction cancelled.");
+        userStates.delete(userPhoneNumber);
+        setTimeout(() => sendMainMenu(userPhoneNumber, user), 1500);
+        return;
+    }
+    await sendMessage(userPhoneNumber, "✅ PIN verified. Processing transaction...");
+    try {
+        const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
+        const client = createWalletClient({ account, chain: morphHolesky, transport: http(process.env.MORPH_RPC_URL) });
+        const txHash = await client.sendTransaction({ to: transaction.toAddress, value: parseEther(transaction.amount) });
+        await sendTransactionSuccessMessage(userPhoneNumber, txHash, " Transaction Successful!");
+        await updateDoc(doc(db, 'users', userPhoneNumber), { 'stats.transactionCount': (user.stats.transactionCount || 0) + 1 });
+    } catch (txError) {
+        console.error("TX Error:", txError.message);
+        await sendMessage(userPhoneNumber, "❌ Transaction failed. Please check your balance and try again.");
+    }
+    userStates.delete(userPhoneNumber);
+    setTimeout(() => sendMainMenu(userPhoneNumber, user), 2000);
+}

@@ -1,0 +1,28 @@
+{
+  "name": "mort-bot-whatsapp",
+  "version": "1.0.0",
+  "description": "A WhatsApp bot for interacting with Web3 games and wallets.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "web3",
+    "bot",
+    "privy",
+    "viem"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@privy-io/server-auth": "^1.2.1",
+    "axios": "^1.7.2",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase": "^10.12.2",
+    "viem": "^2.17.3"
+  }
+}

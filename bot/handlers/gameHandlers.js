@@ -1,0 +1,335 @@
+import { sendMessage, sendTransactionSuccessMessage } from "../services/whatsappService.js";
+import { userStates } from "../index.js";
+import { createViemAccount } from '@privy-io/server-auth/viem';
+import { createWalletClient, http, parseEther, decodeEventLog, createPublicClient } from 'viem';
+import { morphHolesky } from '../config/chains.js';
+import { privy } from '../config/firebase.js';
+import { db } from "../config/firebase.js";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import bcrypt from "bcrypt";
+import axios from "axios";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+const flipGameAbi = require('../abi/flipGameAbi.json');
+const rpsGameAbi = require('../abi/rpsGameAbi.json');
+const ranmiGameAbi = require('../abi/ranmiGameAbi.json');
+
+const FLIP_GAME_CONTRACT_ADDRESS = process.env.FLIP_GAME_CONTRACT_ADDRESS;
+const RPS_GAME_CONTRACT_ADDRESS = process.env.RPS_GAME_CONTRACT_ADDRESS;
+const RANMI_GAME_CONTRACT_ADDRESS = process.env.RANMI_GAME_CONTRACT_ADDRESS;
+const MORPH_RPC_URL = process.env.MORPH_RPC_URL;
+
+async function sendGameAmountMenu(to, choiceText, gamePrefix) {
+    try {
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: `You Chose ${choiceText}` }, body: { text: "How much ETH would you like to bet? " }, footer: { text: "Select a bet amount" }, action: { buttons: [{ type: "reply", reply: { id: `${gamePrefix}_amount_0.001`, title: "0.001 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.01`, title: "0.01 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.1`, title: "0.1 ETH" } }] } } }
+        });
+    } catch (error) {
+        console.error(`❌ Error sending ${gamePrefix} amount menu:`, error.response?.data || error.message);
+        await sendMessage(to, "Sorry, there was an error. Please try starting the game again.");
+        userStates.delete(to);
+    }
+}
+
+export async function handleStartFlipGame(to, user) {
+    try {
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: " Flip It Game" }, body: { text: "Heads or Tails? Make your choice." }, footer: { text: "Provably fair on-chain coin flip." }, action: { buttons: [{ type: "reply", reply: { id: "flip_choice_heads", title: " Heads" } }, { type: "reply", reply: { id: "flip_choice_tails", title: " Tails" } }] } } }
+        });
+    } catch (error) { console.error("❌ Error sending flip game start message:", error.response?.data || error.message); }
+}
+
+export async function handleFlipChoice(phone, user, choice) {
+    userStates.set(phone, { type: 'awaiting_flip_amount', user, choice });
+    const choiceText = choice === 0 ? "Heads" : "Tails";
+    await sendGameAmountMenu(phone, choiceText, 'flip');
+}
+
+export async function handleFlipAmountSelection(phone, amount, state) {
+    const { user, choice } = state;
+    await sendMessage(phone, ` Confirm Flip\n\n Choice: ${choice === 0 ? 'Heads' : 'Tails'}\n Bet: ${amount} ETH\n\nEnter your PIN:`);
+    userStates.set(phone, { type: 'awaiting_pin_for_flip', user, flip: { amount, choice } });
+}
+
+export async function handlePinForFlip(phone, pin, state) {
+    const { user, flip } = state;
+    try {
+        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
+            userStates.delete(phone);
+            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
+            setTimeout(() => sendGamesMenu(phone, user), 1500);
+            return;
+        }
+        await sendMessage(phone, "✅ PIN verified. Placing your bet...");
+        const result = await executeFlipTransaction(user, flip.choice, flip.amount);
+        if (result.success) {
+            await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
+        } else {
+            await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
+        }
+    } catch (e) {
+        await sendMessage(phone, "❌ Bet failed due to a network or balance issue.");
+    } finally {
+        userStates.delete(phone);
+    }
+}
+
+async function executeFlipTransaction(user, choice, amount) {
+    try {
+        const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const hash = await walletClient.writeContract({ address: FLIP_GAME_CONTRACT_ADDRESS, abi: flipGameAbi, functionName: 'flip', args: [choice], value: parseEther(amount.toString()) });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        for (const log of receipt.logs) {
+            if (log.address.toLowerCase() !== FLIP_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            try {
+                const decodedEvent = decodeEventLog({ abi: flipGameAbi, data: log.data, topics: log.topics });
+                if (decodedEvent.eventName === 'FlipRequested') {
+                    await setDoc(doc(db, 'flips', decodedEvent.args.requestId.toString()), { whatsappId: user.whatsappId, username: user.username, betAmount: amount, choice, status: 'pending', requestTimestamp: serverTimestamp(), txHash: hash });
+                    return { success: true, hash };
+                }
+            } catch (e) { console.warn("Could not decode a log from the game contract:", e.message); }
+        }
+        return { success: false, error: 'Could not confirm request ID on-chain.' };
+    } catch (e) {
+        console.error("Flip TX Error:", e);
+        throw e;
+    }
+}
+
+export async function handleStartRpsGame(to, user) {
+    try {
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: "✊ Rock Paper Scissor" }, body: { text: "Make your choice to begin!" }, action: { buttons: [ { type: "reply", reply: { id: "rps_choice_rock", title: "✊ Rock" } }, { type: "reply", reply: { id: "rps_choice_paper", title: "✋ Paper" } }, { type: "reply", reply: { id: "rps_choice_scissor", title: "✌️ Scissor" } } ] } } }
+        });
+    } catch (error) { console.error("❌ Error sending RPS start message:", error.response?.data || error.message); }
+}
+
+export async function handleRpsChoice(phone, user, choice) {
+    userStates.set(phone, { type: 'awaiting_rps_amount', user, choice });
+    const choiceMap = ['✊ Rock', '✋ Paper', '✌️ Scissor'];
+    await sendGameAmountMenu(phone, choiceMap[choice], 'rps');
+}
+
+export async function handleRpsAmountSelection(phone, amount, state) {
+    const { user, choice } = state;
+    const choiceMap = ['Rock', 'Paper', 'Scissor'];
+    await sendMessage(phone, ` Confirm Game\n\n Choice: ${choiceMap[choice]}\n Bet: ${amount} ETH\n\nEnter your PIN:`);
+    userStates.set(phone, { type: 'awaiting_pin_for_rps', user, rps: { amount, choice } });
+}
+
+export async function handlePinForRps(phone, pin, state) {
+    const { user, rps } = state;
+    try {
+        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
+            userStates.delete(phone);
+            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
+            setTimeout(() => sendGamesMenu(phone, user), 1500);
+            return;
+        }
+        await sendMessage(phone, "✅ PIN verified. Placing your bet...");
+        const result = await executeRpsTransaction(user, rps.choice, rps.amount);
+        if (result.success) {
+            await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
+        } else {
+            await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
+        }
+    } catch (e) {
+        await sendMessage(phone, "❌ Bet failed due to a network or balance issue.");
+    } finally {
+        userStates.delete(phone);
+    }
+}
+
+async function executeRpsTransaction(user, choice, amount) {
+    try {
+        const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const hash = await walletClient.writeContract({ address: RPS_GAME_CONTRACT_ADDRESS, abi: rpsGameAbi, functionName: 'play', args: [choice], value: parseEther(amount.toString()) });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        for (const log of receipt.logs) {
+            if (log.address.toLowerCase() !== RPS_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            try {
+                const decodedEvent = decodeEventLog({ abi: rpsGameAbi, data: log.data, topics: log.topics });
+                if (decodedEvent.eventName === 'GamePlayed') {
+                    await setDoc(doc(db, 'rps_games', decodedEvent.args.requestId.toString()), {
+                        whatsappId: user.whatsappId, username: user.username, betAmount: amount, choice, status: 'pending', requestTimestamp: serverTimestamp(), txHash: hash
+                    });
+                    return { success: true, hash };
+                }
+            } catch (e) { console.warn("Could not decode a log from the RPS contract:", e.message); }
+        }
+        return { success: false, error: 'Could not confirm RPS request ID on-chain.' };
+    } catch (e) {
+        console.error("RPS TX Error:", e);
+        throw e;
+    }
+}
+
+export async function handleStartRanmiGame(to, user) {
+    try {
+        const bodyText = " *Welcome to Ranmi!* \n\nI'll show you 5 numbers. Just pick the one you think is lucky to win!\n\nFirst, how much would you like to bet?";
+        await axios({
+            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
+            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            data: { 
+                messaging_product: "whatsapp", 
+                to, 
+                type: "interactive", 
+                interactive: { 
+                    type: "button", 
+                    header: { type: "text", text: " Choose Your Bet" },
+                    body: { text: bodyText },
+                    footer: { text: "Select a bet amount below" },
+                    action: { buttons: [
+                        { type: "reply", reply: { id: "ranmi_amount_0.001", title: "0.001 ETH" } },
+                        { type: "reply", reply: { id: "ranmi_amount_0.01", title: "0.01 ETH" } }, 
+                        { type: "reply", reply: { id: "ranmi_amount_0.1", title: "0.1 ETH" } }
+                    ] } 
+                } 
+            },
+        });
+        userStates.set(to, { type: 'awaiting_ranmi_amount', user });
+    } catch (error) {
+        console.error("❌ Error sending Ranmi start menu:", error.response?.data || error.message);
+        await sendMessage(to, "Sorry, there was an error starting the game. Please try again.");
+    }
+}
+
+export async function handleRanmiAmountSelection(phone, amount, state) {
+    const { user } = state;
+    await sendMessage(phone, ` *Confirm Bet*\n\n Bet: ${amount} ETH\n\nTo start the game and see your numbers, please enter your PIN:`);
+    userStates.set(phone, { type: 'awaiting_pin_for_ranmi_play', user, betAmount: amount });
+}
+
+export async function handlePinForRanmiPlay(phone, pin, state) {
+    const { user, betAmount } = state;
+    try {
+        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
+            userStates.delete(phone);
+            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
+            setTimeout(() => sendGamesMenu(phone, user), 1500);
+            return;
+        }
+        await sendMessage(phone, "✅ PIN verified. Drawing your lucky numbers now...");
+        const result = await executeRanmiPlay(user, betAmount);
+        if (result.success) {
+            await sendMessage(phone, ` Game started! We'll send your 5 numbers in just a moment.`);
+        } else {
+            await sendMessage(phone, `❌ Game could not be started. ${result.error || "Please try again."}`);
+        }
+    } catch (e) {
+        await sendMessage(phone, "❌ Game failed due to a network or balance issue.");
+    } finally {
+        userStates.delete(phone);
+    }
+}
+
+async function executeRanmiPlay(user, amount) {
+    try {
+        const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const hash = await walletClient.writeContract({ address: RANMI_GAME_CONTRACT_ADDRESS, abi: ranmiGameAbi, functionName: 'play', args: [], value: parseEther(amount.toString()) });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        for (const log of receipt.logs) {
+            if (log.address.toLowerCase() !== RANMI_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            try {
+                const decodedEvent = decodeEventLog({ abi: ranmiGameAbi, data: log.data, topics: log.topics });
+                if (decodedEvent.eventName === 'GameStarted') {
+                    await setDoc(doc(db, 'ranmi_games', decodedEvent.args.id.toString()), {
+                        whatsappId: user.whatsappId, username: user.username, betAmount: amount, status: 'pending', requestTimestamp: serverTimestamp(), txHash: hash
+                    });
+                    return { success: true };
+                }
+            } catch (e) { console.warn("Could not decode Ranmi log:", e.message); }
+        }
+        return { success: false, error: 'Could not confirm game start ID on-chain.' };
+    } catch (e) {
+        console.error("Ranmi Play TX Error:", e);
+        throw e;
+    }
+}
+
+export async function sendRanmiGuessMenu(to, id, numbers) {
+    const numbersText = numbers.map(n => `*${n.toString()}*`).join('   ');
+    const message = `Here are your numbers! \n\n${numbersText}\n\nWhich one do you think is the lucky one? Just *type the number* you want to guess.`;
+    
+    await sendMessage(to, message);
+    userStates.set(to, { type: 'awaiting_ranmi_guess', id: id.toString(), drawnNumbers: numbers });
+}
+
+export async function handleRanmiGuessInput(phone, text, state) {
+    const user = await getUserFromDatabase(phone);
+    if (!user) {
+        userStates.delete(phone);
+        return;
+    }
+
+    const { id, drawnNumbers } = state;
+    const guessedNumber = text.trim();
+
+    const drawnNumbersAsStrings = drawnNumbers.map(n => n.toString());
+
+    if (!drawnNumbersAsStrings.includes(guessedNumber)) {
+        await sendMessage(phone, `❌ That's not one of your numbers. Please pick one of these:\n\n${drawnNumbersAsStrings.join(', ')}`);
+        return;
+    }
+    
+    const guessIndex = drawnNumbersAsStrings.indexOf(guessedNumber);
+
+    await sendMessage(phone, ` *Confirm Guess*\n\n You picked the number: *${guessedNumber}*\n\nEnter your PIN to lock in your guess.`);
+    userStates.set(phone, { type: 'awaiting_pin_for_ranmi_guess', user, id, guessIndex });
+}
+
+export async function handlePinForRanmiGuess(phone, pin, state) {
+    const { user, id, guessIndex } = state;
+    try {
+        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
+            userStates.delete(phone);
+            await sendMessage(phone, "❌ Incorrect PIN. Your guess was not submitted.");
+            
+            const gameDoc = await getDoc(doc(db, 'ranmi_games', id));
+            if (gameDoc.exists()) {
+                const gameData = gameDoc.data();
+                setTimeout(() => sendRanmiGuessMenu(phone, id, gameData.drawnNumbers), 1500);
+            }
+            return;
+        }
+        await sendMessage(phone, "✅ PIN verified. Submitting your final guess...");
+        const result = await executeRanmiGuess(user, id, guessIndex);
+        if (result.success) {
+            await sendMessage(phone, `✅ Your guess has been submitted! We'll notify you of the result shortly.`);
+        } else {
+            await sendMessage(phone, `❌ Could not submit your guess. ${result.error || "Please try again."}`);
+        }
+    } catch (e) {
+        await sendMessage(phone, "❌ Guess submission failed due to a network or balance issue.");
+    } finally {
+        userStates.delete(phone);
+    }
+}
+
+async function executeRanmiGuess(user, id, guessIndex) {
+    try {
+        const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const hash = await walletClient.writeContract({ address: RANMI_GAME_CONTRACT_ADDRESS, abi: ranmiGameAbi, functionName: 'makeGuess', args: [BigInt(id), Number(guessIndex)] });
+        
+        await updateDoc(doc(db, 'ranmi_games', id.toString()), { guessTxHash: hash, status: 'guessed', guessIndex });
+        return { success: true };
+    } catch (e) {
+        console.error("Ranmi Guess TX Error:", e);
+        throw e;
+    }
+}
