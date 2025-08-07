@@ -10,9 +10,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const FUNDING_AMOUNT_ETH = '0.001';
+const FUNDING_AMOUNT_ETH = '0.003';
 const MORPH_RPC_URL = process.env.MORPH_RPC_URL;
-const FAUCET_PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 export async function createWalletForUser(username) {
     try {
@@ -26,34 +26,35 @@ export async function createWalletForUser(username) {
     }
 }
 
-export async function fundNewUserWithPrivateKey(recipientAddress, recipientPhoneNumber) {
-    if (!FAUCET_PRIVATE_KEY) {
-        console.error("❌ Faucet private key is not set. Cannot fund new user.");
+export async function fundUser(recipientAddress, recipientPhoneNumber, amount = FUNDING_AMOUNT_ETH) {
+    if (!PRIVATE_KEY || PRIVATE_KEY === "your_faucet_private_key_here") {
+        console.error("❌ Faucet private key is not set or is a placeholder. Cannot fund user.");
         return;
     }
     try {
-        console.log(`ℹ️ Funding new user: ${recipientAddress} with ${FUNDING_AMOUNT_ETH} ETH.`);
-        const account = privateKeyToAccount(`0x${FAUCET_PRIVATE_KEY}`);
+        console.log(`ℹ️ Funding user: ${recipientAddress} with ${amount} ETH.`);
+        const account = privateKeyToAccount(`0x${PRIVATE_KEY}`);
         const client = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
         
         const txHash = await client.sendTransaction({
             to: recipientAddress,
-            value: parseEther(FUNDING_AMOUNT_ETH),
+            value: parseEther(amount),
         });
 
-        console.log(`✅ Successfully sent ${FUNDING_AMOUNT_ETH} ETH to ${recipientAddress}. Tx hash: ${txHash}`);
-        await sendMessage(recipientPhoneNumber, ` We've sent you *${FUNDING_AMOUNT_ETH} ETH* on the Morph Holesky testnet to get you started!`);
+        console.log(`✅ Successfully sent ${amount} ETH to ${recipientAddress}. Tx hash: ${txHash}`);
+        await sendMessage(recipientPhoneNumber, `We've sent you *${amount} ETH* on the Morph Holesky testnet!`);
         
         const fundingRef = doc(collection(db, 'fundingTransactions'));
         await setDoc(fundingRef, {
             to: recipientAddress,
             from: account.address,
-            amount: FUNDING_AMOUNT_ETH,
+            amount: amount,
             txHash: txHash,
             timestamp: serverTimestamp(),
             recipientPhoneNumber: recipientPhoneNumber
         });
     } catch (error) {
-        console.error(`❌ Error funding new user ${recipientAddress}:`, error);
+        console.error(`❌ Error funding user ${recipientAddress}:`, error);
+        await sendMessage(recipientPhoneNumber, "Sorry, there was an error trying to fund your account from the faucet.");
     }
 }

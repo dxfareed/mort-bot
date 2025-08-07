@@ -68,8 +68,8 @@ async function settleRpsGame(gameId, randomNumber) {
 async function deliverRanmiNumbers(gameId, randomWords) {
     console.log(`  -> [MORPH ACTION] Delivering Ranmi numbers for Game ID ${gameId}`);
     try {
-        const numbers = randomWords.slice(0, 5).map(word => Number(word % 10n));
-        const winningIndex = Number(randomWords[5] % 5n);
+        const numbers = randomWords.slice(0, 5).map(word => word % 10n);
+        const winningIndex = randomWords[5] % 5n;
 
         const txHash = await morphWalletClient.writeContract({
             address: RANMI_GAME_CONTRACT_ADDRESS,
@@ -122,12 +122,12 @@ export function startRelayerService() {
 
     // Listener for Flip Game on Morph
     morphPublicClient.watchContractEvent({
-        address: FLIP_GAME_CONTRACT_ADDRESS, abi: flipGameAbi, eventName: 'FlipRequested',
+        address: FLIP_GAME_CONTRACT_ADDRESS, abi: flipGameAbi, eventName: 'FlipInitiated',
         onLogs: logs => logs.forEach(log => {
             console.log(`
-✅ [MORPH EVENT] FlipRequested`);
-            console.log(`  - Game ID: ${log.args.requestId}`);
-            requestRandomness(log.args.requestId, VRF_REQUESTER_FLIP_RPS_ADDRESS);
+✅ [MORPH EVENT] FlipInitiated`);
+            console.log(`  - Game ID: ${log.args.gameId}`);
+            requestRandomness(log.args.gameId, VRF_REQUESTER_FLIP_RPS_ADDRESS);
         }),
         onError: error => console.error("❌ Flip Listener Error:", error)
     });
@@ -154,6 +154,46 @@ export function startRelayerService() {
             requestRanmiNumbers(log.args.id);
         }),
         onError: error => console.error("❌ Ranmi Listener Error:", error)
+    });
+
+    // Listener for Flip Game Settlement on Morph
+    morphPublicClient.watchContractEvent({
+        address: FLIP_GAME_CONTRACT_ADDRESS, abi: flipGameAbi, eventName: 'FlipSettled',
+        onLogs: logs => logs.forEach(async log => {
+            const { gameId, won, payout } = log.args;
+            console.log(`
+✅ [MORPH EVENT] FlipSettled`);
+            console.log(`  - Game ID: ${gameId}, Won: ${won}, Payout: ${formatEther(payout)} ETH`);
+
+            const flipDocRef = doc(db, 'flips', gameId.toString());
+            const flipDocSnap = await getDoc(flipDocRef);
+
+            if (flipDocSnap.exists() && flipDocSnap.data().status === 'pending') {
+                const flipData = flipDocSnap.data();
+                const payoutFormatted = formatEther(payout);
+                const userChoice = flipData.choice;
+                const userChoiceStr = userChoice === 0 ? 'Heads' : 'Tails';
+                const actualResult = won ? userChoice : (1 - userChoice);
+                const resultStr = actualResult === 0 ? '🗿 Heads' : '🪙 Tails';
+                
+                const messageBody = won 
+                    ? `The coin landed on *${resultStr}*!\n\nYou chose *${userChoiceStr}* and WON! 🎉\n\nYou've received ${payoutFormatted} ETH.`
+                    : `The coin landed on *${resultStr}*.\n\nYou chose *${userChoiceStr}* and lost.\nBetter luck next time!`;
+
+                await sendMessage(flipData.whatsappId, messageBody);
+                await updateDoc(flipDocRef, { 
+                    status: 'resolved', 
+                    result: won ? 'lost' : 'won', 
+                    payoutAmount: payoutFormatted, 
+                    resolvedTimestamp: serverTimestamp() 
+                });
+                
+                // We can add user stats update here later if needed
+                
+                setTimeout(() => sendPostGameMenu(flipData.whatsappId), 2000);
+            }
+        }),
+        onError: error => console.error("❌ Flip Settlement Listener Error:", error)
     });
 
     // Listener for Randomness on Base Sepolia (for Flip and RPS)
@@ -188,7 +228,11 @@ export function startRelayerService() {
             console.log(`
 🎲 [BASE EVENT] Ranmi Numbers Fulfilled`);
             console.log(`  - Game ID: ${gameId}`);
-            await deliverRanmiNumbers(gameId, randomWords);
+            
+            const ranmiDoc = await getDoc(doc(db, 'ranmi_games', gameId.toString()));
+            if (ranmiDoc.exists()) {
+                await deliverRanmiNumbers(gameId, randomWords);
+            }
         }),
         onError: error => console.error("❌ Ranmi VRF Listener Error:", error)
     });
