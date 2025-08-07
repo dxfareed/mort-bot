@@ -1,4 +1,4 @@
-import { sendMessage, sendTransactionSuccessMessage } from "../services/whatsappService.js";
+import { sendMessage, sendTransactionSuccessMessage, sendMainMenu } from "../services/whatsappService.js";
 import { userStates } from "../index.js";
 import { getUserByUsername } from "../services/databaseService.js";
 import { createViemAccount } from '@privy-io/server-auth/viem';
@@ -31,14 +31,24 @@ export async function handleReceiveCrypto(userPhoneNumber, user) {
     setTimeout(() => sendMainMenu(userPhoneNumber, user), 2000);
 }
 
+import { fundUser } from "../services/web3Service.js";
+
 export async function handleViewBalance(userPhoneNumber, user) {
     try {
         const price = await fetchEthPrice();
         await sendMessage(userPhoneNumber, " Checking your balance...");
         const publicClient = createPublicClient({ chain: morphHolesky, transport: http(process.env.MORPH_RPC_URL) });
         const balance = await publicClient.getBalance({ address: user.wallet.primaryAddress });
-        const user_bal = Number(formatEther(balance)).toFixed(3);
-        await sendMessage(userPhoneNumber, ` Wallet Balance\nETH: ${user_bal}\n$${(parseFloat(user_bal) * price).toFixed(2)}`);
+        const user_bal = Number(formatEther(balance));
+        
+        await sendMessage(userPhoneNumber, ` Wallet Balance\nETH: ${user_bal.toFixed(5)}
+${(user_bal * price).toFixed(2)}`);
+
+        if (user_bal <= 0.001) {
+            await sendMessage(userPhoneNumber, "Your balance is low. We're sending you some more ETH to keep you playing!");
+            await fundUser(user.wallet.primaryAddress, userPhoneNumber);
+        }
+
         setTimeout(() => sendMainMenu(userPhoneNumber, user), 2000);
     } catch (error) {
         console.error("❌ Error fetching balance:", error);

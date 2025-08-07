@@ -9,7 +9,8 @@ dotenv.config();
 
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const MORPH_RPC_URL = process.env.MORPH_RPC_URL;
-const GRAPH_FACEBOOK_MESSAGE = "https://graph.facebook.com/v22.0/696395350222810/message"
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const GRAPH_FACEBOOK_MESSAGE = `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`
 
 export async function sendMessage(to, body) {
     try {
@@ -100,7 +101,7 @@ export async function sendMainMenu(to, user) {
         await axios({
             url: GRAPH_FACEBOOK_MESSAGE,
             method: "POST", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
-            data: { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: "What's Next?" }, body: { text: `Your current balance is\nETH: ${user_bal}\n$${usdValue.toFixed(2)}\n\nChoose an option to continue.` }, footer: { text: "Mort by Hot Coffee" }, action: { buttons: [{ type: "reply", reply: { id: "games_option", title: " Games" } }, { type: "reply", reply: { id: "wallet_option", title: " Wallet" } }] } } },
+            data: { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: "What's Next?" }, body: { text: `Your current balance is\nETH: ${user_bal}\n${usdValue.toFixed(2)}\n\nChoose an option to continue.` }, footer: { text: "Mort by Hot Coffee" }, action: { buttons: [{ type: "reply", reply: { id: "games_option", title: " Games" } }, { type: "reply", reply: { id: "wallet_option", title: " Wallet" } }] } } },
         });
         console.log("✅ Main menu sent to:", to);
     } catch (error) { console.error("❌ Error sending main menu:", error.response?.data || error.message); }

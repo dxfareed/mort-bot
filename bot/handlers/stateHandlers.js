@@ -1,7 +1,7 @@
-import { sendMessage } from "../services/whatsappService.js";
+import { sendMessage, sendMainMenu } from "../services/whatsappService.js";
 import { userStates } from "../index.js";
 import { getUserFromDatabase } from "../services/databaseService.js";
-import { sendMainMenu } from "../services/whatsappService.js";
+//import { sendMainMenu } from "../services/whatsappService.js";
 import { handleTransactionInput, handlePinForTransaction } from "./walletHandlers.js";
 import { handleFlipAmountSelection, handlePinForFlip, handleRpsAmountSelection, handlePinForRps, handleRanmiAmountSelection, handlePinForRanmiPlay, handleRanmiGuessInput, handlePinForRanmiGuess } from "./gameHandlers.js";
 

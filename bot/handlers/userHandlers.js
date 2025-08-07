@@ -1,9 +1,9 @@
 import { sendMessage } from "../services/whatsappService.js";
 import { checkUsernameExists, createUserInDatabase } from "../services/databaseService.js";
-import { createWalletForUser, fundNewUserWithPrivateKey } from "../services/web3Service.js";
+import { createWalletForUser, fundUser } from "../services/web3Service.js";
 import { hashPin } from "../utils/security.js";
 import { registrationStates } from "../index.js";
-import { sendWelcomeBackMessage } from "../services/whatsappService.js";
+import { sendWelcomeBackMessage, sendNewUserWelcomeMessage } from "../services/whatsappService.js";
 
 const REGISTRATION_STEPS = {
     AWAITING_USERNAME: 'awaiting_username',
@@ -83,7 +83,7 @@ async function handlePinConfirmation(userPhoneNumber, confirmPin) {
         if (await createUserInDatabase(userData)) {
             registrationStates.delete(userPhoneNumber);
             await sendMessage(userPhoneNumber, ` Account created successfully!\n\n✅ Username: ${state.username}\n Wallet Address: ${walletData.address}\n\nWelcome to Mort!`);
-            await fundNewUserWithPrivateKey(walletData.address, userPhoneNumber);
+            await fundUser(walletData.address, userPhoneNumber);
             setTimeout(async () => {
                 const user = await getUserFromDatabase(userPhoneNumber);
                 await sendWelcomeBackMessage(userPhoneNumber, user);

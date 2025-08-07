@@ -2,9 +2,9 @@ import express from "express";
 import { handleNewUserFlow } from "./userHandlers.js";
 import { handleStatefulInput } from "./stateHandlers.js";
 import { handleButtonSelection } from "./buttonHandlers.js";
-import { sendNewUserWelcomeMessage, sendWelcomeBackMessage, sendGamesMenu, sendWalletMenu } from "../services/whatsappService.js";
+import { sendMessage, sendNewUserWelcomeMessage, sendWelcomeBackMessage, sendGamesMenu, sendWalletMenu } from "../services/whatsappService.js";
 import { getUserFromDatabase, updateUserLastSeen } from "../services/databaseService.js";
-import { registrationStates } from "../index.js";
+import { userStates, registrationStates } from "../index.js";
 
 const router = express.Router();
 
