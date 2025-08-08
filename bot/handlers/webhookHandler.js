@@ -8,7 +8,10 @@ import { userStates, registrationStates } from "../index.js";
 
 const router = express.Router();
 
-const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_HOOK_TOKEN;
+import { config } from '../config/index.js';
+// ...
+const WEBHOOK_VERIFY_TOKEN = config.webhookVerifyToken;
+
 
 router.get("/", (req, res) => {
     const mode = req.query["hub.mode"];
