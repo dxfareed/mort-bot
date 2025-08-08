@@ -1,9 +1,7 @@
 import express from "express";
-import dotenv from "dotenv";
 import webhookHandler from "./handlers/webhookHandler.js";
 import { startRelayerService } from "./services/relayerService.js";
-
-dotenv.config();
+import { config } from "./config/index.js";
 
 const app = express();
 app.use(express.json());
@@ -11,7 +9,7 @@ app.use(express.json());
 export const userStates = new Map();
 export const registrationStates = new Map();
 
-const PORT = process.env.PORT || 3000;
+const PORT = config.port || 3000;
 
 app.use("/webhook", webhookHandler);
 

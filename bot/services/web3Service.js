@@ -6,13 +6,13 @@ import { privy } from '../config/firebase.js';
 import { sendMessage } from './whatsappService.js';
 import { doc, setDoc, serverTimestamp, collection } from "firebase/firestore";
 import { db } from "../config/firebase.js";
-import dotenv from "dotenv";
 
-dotenv.config();
+
+import { config } from '../config/index.js';
+
+
 
 const FUNDING_AMOUNT_ETH = '0.003';
-const MORPH_RPC_URL = process.env.MORPH_RPC_URL;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 export async function createWalletForUser(username) {
     try {
@@ -27,14 +27,14 @@ export async function createWalletForUser(username) {
 }
 
 export async function fundUser(recipientAddress, recipientPhoneNumber, amount = FUNDING_AMOUNT_ETH) {
-    if (!PRIVATE_KEY || PRIVATE_KEY === "your_faucet_private_key_here") {
+    if (!config.privateKey || config.privateKey === "your_faucet_private_key_here") {
         console.error("❌ Faucet private key is not set or is a placeholder. Cannot fund user.");
         return;
     }
     try {
         console.log(`ℹ️ Funding user: ${recipientAddress} with ${amount} ETH.`);
-        const account = privateKeyToAccount(`0x${PRIVATE_KEY}`);
-        const client = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
+        const account = privateKeyToAccount(`0x${config.privateKey}`);
+        const client = createWalletClient({ account, chain: morphHolesky, transport: http(config.morphRpcUrl) });
         
         const txHash = await client.sendTransaction({
             to: recipientAddress,

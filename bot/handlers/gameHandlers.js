@@ -1,14 +1,16 @@
 import { sendMessage, sendTransactionSuccessMessage, sendGamesMenu } from "../services/whatsappService.js";
 import { userStates } from "../index.js";
+import { getUserFromDatabase } from "../services/databaseService.js";
 import { createViemAccount } from '@privy-io/server-auth/viem';
 import { createWalletClient, http, parseEther, decodeEventLog, createPublicClient } from 'viem';
 import { morphHolesky } from '../config/chains.js';
 import { privy } from '../config/firebase.js';
 import { db } from "../config/firebase.js";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import bcrypt from "bcrypt";
 import axios from "axios";
 import { createRequire } from 'module';
+import { config } from '../config/index.js';
 
 const require = createRequire(import.meta.url);
 
@@ -16,16 +18,11 @@ const flipGameAbi = require('../abi/flipGameAbi.json');
 const rpsGameAbi = require('../abi/rpsGameAbi.json');
 const ranmiGameAbi = require('../abi/ranmiGameAbi.json');
 
-const FLIP_GAME_CONTRACT_ADDRESS = process.env.FLIP_GAME_CONTRACT_ADDRESS;
-const RPS_GAME_CONTRACT_ADDRESS = process.env.RPS_GAME_CONTRACT_ADDRESS;
-const RANMI_GAME_CONTRACT_ADDRESS = process.env.RANMI_GAME_CONTRACT_ADDRESS;
-const MORPH_RPC_URL = process.env.MORPH_RPC_URL;
-
 async function sendGameAmountMenu(to, choiceText, gamePrefix) {
     try {
         await axios({
-            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
-            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            url: config.graphApiUrl,
+            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
             data: {
                 messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: `You Chose ${choiceText}` }, body: { text: "How much ETH would you like to bet? " }, footer: { text: "Select a bet amount" }, action: { buttons: [{ type: "reply", reply: { id: `${gamePrefix}_amount_0.001`, title: "0.001 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.01`, title: "0.01 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.1`, title: "0.1 ETH" } }] } }
             }
@@ -40,8 +37,8 @@ async function sendGameAmountMenu(to, choiceText, gamePrefix) {
 export async function handleStartFlipGame(to, user) {
     try {
         await axios({
-            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
-            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            url: config.graphApiUrl,
+            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
             data: {
                 messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: " Flip It Game" }, body: { text: "Heads or Tails? Make your choice." }, footer: { text: "Provably fair on-chain coin flip." }, action: { buttons: [{ type: "reply", reply: { id: "flip_choice_heads", title: " Heads" } }, { type: "reply", reply: { id: "flip_choice_tails", title: " Tails" } }] } }
             }
@@ -74,6 +71,7 @@ export async function handlePinForFlip(phone, pin, state) {
         const result = await executeFlipTransaction(user, flip.choice, flip.amount);
         if (result.success) {
             await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
+            await sendMessage(phone, "Please wait a moment while we determine the result on-chain... ⏳");
         } else {
             await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
         }
@@ -87,12 +85,12 @@ export async function handlePinForFlip(phone, pin, state) {
 async function executeFlipTransaction(user, choice, amount) {
     try {
         const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
-        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const hash = await walletClient.writeContract({ address: FLIP_GAME_CONTRACT_ADDRESS, abi: flipGameAbi, functionName: 'flip', args: [choice], value: parseEther(amount.toString()) });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const hash = await walletClient.writeContract({ address: config.flipGameAddress, abi: flipGameAbi, functionName: 'flip', args: [choice], value: parseEther(amount.toString()) });
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         for (const log of receipt.logs) {
-            if (log.address.toLowerCase() !== FLIP_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            if (log.address.toLowerCase() !== config.flipGameAddress.toLowerCase()) continue;
             try {
                 const decodedEvent = decodeEventLog({ abi: flipGameAbi, data: log.data, topics: log.topics });
                 if (decodedEvent.eventName === 'FlipInitiated') {
@@ -111,8 +109,8 @@ async function executeFlipTransaction(user, choice, amount) {
 export async function handleStartRpsGame(to, user) {
     try {
         await axios({
-            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
-            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            url: config.graphApiUrl,
+            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
             data: {
                 messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: "✊ Rock Paper Scissor" }, body: { text: "Make your choice to begin!" }, action: { buttons: [{ type: "reply", reply: { id: "rps_choice_rock", title: "✊ Rock" } }, { type: "reply", reply: { id: "rps_choice_paper", title: "✋ Paper" } }, { type: "reply", reply: { id: "rps_choice_scissor", title: "✌️ Scissor" } }] } }
             }
@@ -146,6 +144,7 @@ export async function handlePinForRps(phone, pin, state) {
         const result = await executeRpsTransaction(user, rps.choice, rps.amount);
         if (result.success) {
             await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
+            await sendMessage(phone, "Please wait a moment while we determine the result on-chain... ⏳");
         } else {
             await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
         }
@@ -159,16 +158,16 @@ export async function handlePinForRps(phone, pin, state) {
 async function executeRpsTransaction(user, choice, amount) {
     try {
         const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
-        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const hash = await walletClient.writeContract({ address: RPS_GAME_CONTRACT_ADDRESS, abi: rpsGameAbi, functionName: 'play', args: [choice], value: parseEther(amount.toString()) });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const hash = await walletClient.writeContract({ address: config.rpsGameAddress, abi: rpsGameAbi, functionName: 'play', args: [choice], value: parseEther(amount.toString()) });
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         for (const log of receipt.logs) {
-            if (log.address.toLowerCase() !== RPS_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            if (log.address.toLowerCase() !== config.rpsGameAddress.toLowerCase()) continue;
             try {
                 const decodedEvent = decodeEventLog({ abi: rpsGameAbi, data: log.data, topics: log.topics });
                 if (decodedEvent.eventName === 'GamePlayed') {
-                    await setDoc(doc(db, 'rps_games', decodedEvent.args.requestId.toString()), {
+                    await setDoc(doc(db, 'rps_games', decodedEvent.args.gameId.toString()), {
                         whatsappId: user.whatsappId, username: user.username, betAmount: amount, choice, status: 'pending', requestTimestamp: serverTimestamp(), txHash: hash
                     });
                     return { success: true, hash };
@@ -186,8 +185,8 @@ export async function handleStartRanmiGame(to, user) {
     try {
         const bodyText = " *Welcome to Ranmi!* \n\nI'll show you 5 numbers. Just pick the one you think is lucky to win!\n\nFirst, how much would you like to bet?";
         await axios({
-            url: `https://graph.facebook.com/v22.0/696395350222810/messages`,
-            method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+            url: config.graphApiUrl,
+            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
             data: {
                 messaging_product: "whatsapp",
                 to,
@@ -246,12 +245,12 @@ export async function handlePinForRanmiPlay(phone, pin, state) {
 async function executeRanmiPlay(user, amount) {
     try {
         const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
-        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const hash = await walletClient.writeContract({ address: RANMI_GAME_CONTRACT_ADDRESS, abi: ranmiGameAbi, functionName: 'play', args: [], value: parseEther(amount.toString()) });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const publicClient = createPublicClient({ chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const hash = await walletClient.writeContract({ address: config.ranmiGameAddress, abi: ranmiGameAbi, functionName: 'play', value: parseEther(amount.toString()) });
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         for (const log of receipt.logs) {
-            if (log.address.toLowerCase() !== RANMI_GAME_CONTRACT_ADDRESS.toLowerCase()) continue;
+            if (log.address.toLowerCase() !== config.ranmiGameAddress.toLowerCase()) continue;
             try {
                 const decodedEvent = decodeEventLog({ abi: ranmiGameAbi, data: log.data, topics: log.topics });
                 if (decodedEvent.eventName === 'GameStarted') {
@@ -331,8 +330,8 @@ export async function handlePinForRanmiGuess(phone, pin, state) {
 async function executeRanmiGuess(user, id, guessIndex) {
     try {
         const account = await createViemAccount({ walletId: user.wallet.walletId, address: user.wallet.primaryAddress, privy });
-        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(MORPH_RPC_URL) });
-        const hash = await walletClient.writeContract({ address: RANMI_GAME_CONTRACT_ADDRESS, abi: ranmiGameAbi, functionName: 'makeGuess', args: [BigInt(id), Number(guessIndex)] });
+        const walletClient = createWalletClient({ account, chain: morphHolesky, transport: http(config.morphRpcUrl) });
+        const hash = await walletClient.writeContract({ address: config.ranmiGameAddress, abi: ranmiGameAbi, functionName: 'makeGuess', args: [BigInt(id), Number(guessIndex)] });
 
         await updateDoc(doc(db, 'ranmi_games', id.toString()), { guessTxHash: hash, status: 'guessed', guessIndex });
         return { success: true };
