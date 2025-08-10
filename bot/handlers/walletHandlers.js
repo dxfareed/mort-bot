@@ -1,4 +1,4 @@
-import { sendMessage, sendTransactionSuccessMessage, sendMainMenu } from "../services/whatsappService.js";
+import { sendMessage, sendTransactionSuccessMessage, sendMainMenu, sendCryptoMenu, sendPinPrompt } from "../services/whatsappService.js";
 import { userStates } from "../index.js";
 import { getUserByUsername } from "../services/databaseService.js";
 import { createViemAccount } from '@privy-io/server-auth/viem';
@@ -9,22 +9,12 @@ import { fetchEthPrice } from "../utils/api.js";
 import bcrypt from "bcrypt";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../config/firebase.js";
-import axios from 'axios';
 import { config } from '../config/index.js';
 import { fundUser } from "../services/web3Service.js";
 
 export async function handleSendCrypto(userPhoneNumber, user) {
     userStates.set(userPhoneNumber, { type: 'awaiting_transaction', user: user });
-    try {
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: { messaging_product: "whatsapp", to: userPhoneNumber, type: "interactive", interactive: { type: "button", body: { text: " *Send Crypto*\nPlease enter the transaction details in one of these formats:\n\n`send [amount] to [address]`\n`send [amount] to [username]`" }, action: { buttons: [{ type: "reply", reply: { id: "cancel_operation", title: "❌ Cancel" } }] } } }
-        });
-    } catch (error) {
-        console.error("❌ Error sending send crypto prompt:", error.response?.data || error.message);
-        await sendMessage(userPhoneNumber, " Send Crypto\nPlease enter in this format: 'send [amount] to [address]'\n\n(Reply with 'cancel' to exit)");
-    }
+    await sendCryptoMenu(userPhoneNumber);
 }
 
 export async function handleReceiveCrypto(userPhoneNumber, user) {
@@ -86,17 +76,7 @@ export async function handleTransactionInput(userPhoneNumber, userText, user) {
         recipientIdentifier = `${recipientUser.username} (${toAddress.substring(0, 6)}...${toAddress.substring(38)})`;
     }
     userStates.set(userPhoneNumber, { type: 'awaiting_pin_for_transaction', user: user, transaction: { amount, toAddress } });
-    try {
-        const bodyText = ` *Confirm Transaction*\n\n*Amount:* ${amount} ETH\n*To:* ${recipientIdentifier}\n\nPlease enter your PIN to confirm.`;
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: { messaging_product: "whatsapp", to: userPhoneNumber, type: "interactive", interactive: { type: "button", body: { text: bodyText }, action: { buttons: [{ type: "reply", reply: { id: "cancel_operation", title: "❌ Cancel" } }] } } }
-        });
-    } catch (error) {
-        console.error("❌ Error sending PIN prompt:", error.response?.data || error.message);
-        await sendMessage(userPhoneNumber, ` Confirm Transaction\n Amount: ${amount} ETH\nTo: ${recipientIdentifier}\n\nEnter your PIN:`)
-    }
+    await sendPinPrompt(userPhoneNumber, amount, recipientIdentifier);
 }
 
 export async function handlePinForTransaction(userPhoneNumber, enteredPin, userState) {
