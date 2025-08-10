@@ -1,4 +1,4 @@
-import { sendMessage, sendTransactionSuccessMessage, sendGamesMenu } from "../services/whatsappService.js";
+import { sendMessage, sendTransactionSuccessMessage, sendGamesMenu, sendGameAmountMenu, sendStartFlipGameMenu, sendStartRpsGameMenu, sendStartRanmiGameMenu } from "../services/whatsappService.js";
 import { userStates } from "../index.js";
 import { getUserFromDatabase } from "../services/databaseService.js";
 import { createViemAccount } from '@privy-io/server-auth/viem';
@@ -8,7 +8,6 @@ import { privy } from '../config/firebase.js';
 import { db } from "../config/firebase.js";
 import { doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import bcrypt from "bcrypt";
-import axios from "axios";
 import { createRequire } from 'module';
 import { config } from '../config/index.js';
 
@@ -18,32 +17,8 @@ const flipGameAbi = require('../abi/flipGameAbi.json');
 const rpsGameAbi = require('../abi/rpsGameAbi.json');
 const ranmiGameAbi = require('../abi/ranmiGameAbi.json');
 
-async function sendGameAmountMenu(to, choiceText, gamePrefix) {
-    try {
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: {
-                messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: `You Chose ${choiceText}` }, body: { text: "How much ETH would you like to bet? " }, footer: { text: "Select a bet amount" }, action: { buttons: [{ type: "reply", reply: { id: `${gamePrefix}_amount_0.001`, title: "0.001 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.01`, title: "0.01 ETH" } }, { type: "reply", reply: { id: `${gamePrefix}_amount_0.1`, title: "0.1 ETH" } }] } }
-            }
-        });
-    } catch (error) {
-        console.error(`❌ Error sending ${gamePrefix} amount menu:`, error.response?.data || error.message);
-        await sendMessage(to, "Sorry, there was an error. Please try starting the game again.");
-        userStates.delete(to);
-    }
-}
-
 export async function handleStartFlipGame(to, user) {
-    try {
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: {
-                messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: " Flip It Game" }, body: { text: "Heads or Tails? Make your choice." }, footer: { text: "Provably fair on-chain coin flip." }, action: { buttons: [{ type: "reply", reply: { id: "flip_choice_heads", title: " Heads" } }, { type: "reply", reply: { id: "flip_choice_tails", title: " Tails" } }] } }
-            }
-        });
-    } catch (error) { console.error("❌ Error sending flip game start message:", error.response?.data || error.message); }
+    await sendStartFlipGameMenu(to);
 }
 
 export async function handleFlipChoice(phone, user, choice) {
@@ -107,15 +82,7 @@ async function executeFlipTransaction(user, choice, amount) {
 }
 
 export async function handleStartRpsGame(to, user) {
-    try {
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: {
-                messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", header: { type: "text", text: "✊ Rock Paper Scissor" }, body: { text: "Make your choice to begin!" }, action: { buttons: [{ type: "reply", reply: { id: "rps_choice_rock", title: "✊ Rock" } }, { type: "reply", reply: { id: "rps_choice_paper", title: "✋ Paper" } }, { type: "reply", reply: { id: "rps_choice_scissor", title: "✌️ Scissor" } }] } }
-            }
-        });
-    } catch (error) { console.error("❌ Error sending RPS start message:", error.response?.data || error.message); }
+    await sendStartRpsGameMenu(to);
 }
 
 export async function handleRpsChoice(phone, user, choice) {
@@ -182,35 +149,8 @@ async function executeRpsTransaction(user, choice, amount) {
 }
 
 export async function handleStartRanmiGame(to, user) {
-    try {
-        const bodyText = " *Welcome to Ranmi!* \n\nI'll show you 5 numbers. Just pick the one you think is lucky to win!\n\nFirst, how much would you like to bet?";
-        await axios({
-            url: config.graphApiUrl,
-            method: "POST", headers: { Authorization: `Bearer ${config.whatsappToken}`, "Content-Type": "application/json" },
-            data: {
-                messaging_product: "whatsapp",
-                to,
-                type: "interactive",
-                interactive: {
-                    type: "button",
-                    header: { type: "text", text: " Choose Your Bet" },
-                    body: { text: bodyText },
-                    footer: { text: "Select a bet amount below" },
-                    action: {
-                        buttons: [
-                            { type: "reply", reply: { id: "ranmi_amount_0.001", title: "0.001 ETH" } },
-                            { type: "reply", reply: { id: "ranmi_amount_0.01", title: "0.01 ETH" } },
-                            { type: "reply", reply: { id: "ranmi_amount_0.1", title: "0.1 ETH" } }
-                        ]
-                    }
-                }
-            },
-        });
-        userStates.set(to, { type: 'awaiting_ranmi_amount', user });
-    } catch (error) {
-        console.error("❌ Error sending Ranmi start menu:", error.response?.data || error.message);
-        await sendMessage(to, "Sorry, there was an error starting the game. Please try again.");
-    }
+    await sendStartRanmiGameMenu(to);
+    userStates.set(to, { type: 'awaiting_ranmi_amount', user });
 }
 
 export async function handleRanmiAmountSelection(phone, amount, state) {
