@@ -33,28 +33,43 @@ export async function handleFlipAmountSelection(phone, amount, state) {
     userStates.set(phone, { type: 'awaiting_pin_for_flip', user, flip: { amount, choice } });
 }
 
-export async function handlePinForFlip(phone, pin, state) {
-    const { user, flip } = state;
+async function handlePinVerification(phone, pin, state) {
+    const { user, action, successMessage, failureMessage, execute, onSuccessfulTx } = state;
     try {
         if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
             userStates.delete(phone);
-            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
+            await sendMessage(phone, "❌ Incorrect PIN. Action cancelled.");
             setTimeout(() => sendGamesMenu(phone, user), 1500);
             return;
         }
-        await sendMessage(phone, "✅ PIN verified. Placing your bet...");
-        const result = await executeFlipTransaction(user, flip.choice, flip.amount);
+
+        await sendMessage(phone, "✅ PIN verified. Processing...");
+        const result = await execute();
+
         if (result.success) {
-            await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
-            await sendMessage(phone, "Please wait a moment while we determine the result on-chain... ⏳");
+            if (onSuccessfulTx) await onSuccessfulTx(phone, result.hash);
+            await sendMessage(phone, successMessage);
         } else {
-            await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
+            await sendMessage(phone, failureMessage || `❌ Action failed. ${result.error || "Please try again."}`);
         }
     } catch (e) {
-        await sendMessage(phone, "❌ Bet failed due to a network or balance issue.");
+        console.error(`Error during ${action}:`, e);
+        await sendMessage(phone, `❌ Action failed due to a network or balance issue.`);
     } finally {
         userStates.delete(phone);
     }
+}
+
+export async function handlePinForFlip(phone, pin, state) {
+    const { user, flip } = state;
+    const newState = {
+        ...state,
+        action: 'flip',
+        successMessage: "Please wait a moment while we determine the result on-chain... ⏳",
+        execute: () => executeFlipTransaction(user, flip.choice, flip.amount),
+        onSuccessfulTx: (p, hash) => sendTransactionSuccessMessage(p, hash, "Bet Placed!"),
+    };
+    await handlePinVerification(phone, pin, newState);
 }
 
 async function executeFlipTransaction(user, choice, amount) {
@@ -100,26 +115,14 @@ export async function handleRpsAmountSelection(phone, amount, state) {
 
 export async function handlePinForRps(phone, pin, state) {
     const { user, rps } = state;
-    try {
-        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
-            userStates.delete(phone);
-            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
-            setTimeout(() => sendGamesMenu(phone, user), 1500);
-            return;
-        }
-        await sendMessage(phone, "✅ PIN verified. Placing your bet...");
-        const result = await executeRpsTransaction(user, rps.choice, rps.amount);
-        if (result.success) {
-            await sendTransactionSuccessMessage(phone, result.hash, " Bet Placed!");
-            await sendMessage(phone, "Please wait a moment while we determine the result on-chain... ⏳");
-        } else {
-            await sendMessage(phone, `❌ Bet failed. ${result.error || "Check balance and try again."}`);
-        }
-    } catch (e) {
-        await sendMessage(phone, "❌ Bet failed due to a network or balance issue.");
-    } finally {
-        userStates.delete(phone);
-    }
+    const newState = {
+        ...state,
+        action: 'rps',
+        successMessage: "Please wait a moment while we determine the result on-chain... ⏳",
+        execute: () => executeRpsTransaction(user, rps.choice, rps.amount),
+        onSuccessfulTx: (p, hash) => sendTransactionSuccessMessage(p, hash, "Bet Placed!"),
+    };
+    await handlePinVerification(phone, pin, newState);
 }
 
 async function executeRpsTransaction(user, choice, amount) {
@@ -161,25 +164,14 @@ export async function handleRanmiAmountSelection(phone, amount, state) {
 
 export async function handlePinForRanmiPlay(phone, pin, state) {
     const { user, betAmount } = state;
-    try {
-        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
-            userStates.delete(phone);
-            await sendMessage(phone, "❌ Incorrect PIN. Game cancelled.");
-            setTimeout(() => sendGamesMenu(phone, user), 1500);
-            return;
-        }
-        await sendMessage(phone, "✅ PIN verified. Drawing your lucky numbers now...");
-        const result = await executeRanmiPlay(user, betAmount);
-        if (result.success) {
-            await sendMessage(phone, ` Game started! We'll send your 5 numbers in just a moment.`);
-        } else {
-            await sendMessage(phone, `❌ Game could not be started. ${result.error || "Please try again."}`);
-        }
-    } catch (e) {
-        await sendMessage(phone, "❌ Game failed due to a network or balance issue.");
-    } finally {
-        userStates.delete(phone);
-    }
+    const newState = {
+        ...state,
+        action: 'ranmi_play',
+        successMessage: "Game started! We'll send your 5 numbers in just a moment.",
+        failureMessage: "❌ Game could not be started. Please try again.",
+        execute: () => executeRanmiPlay(user, betAmount),
+    };
+    await handlePinVerification(phone, pin, newState);
 }
 
 async function executeRanmiPlay(user, amount) {
@@ -241,30 +233,14 @@ export async function handleRanmiGuessInput(phone, text, state) {
 
 export async function handlePinForRanmiGuess(phone, pin, state) {
     const { user, id, guessIndex } = state;
-    try {
-        if (!(await bcrypt.compare(pin, user.security.hashedPin))) {
-            userStates.delete(phone);
-            await sendMessage(phone, "❌ Incorrect PIN. Your guess was not submitted.");
-
-            const gameDoc = await getDoc(doc(db, 'ranmi_games', id));
-            if (gameDoc.exists()) {
-                const gameData = gameDoc.data();
-                setTimeout(() => sendRanmiGuessMenu(phone, id, gameData.drawnNumbers), 1500);
-            }
-            return;
-        }
-        await sendMessage(phone, "✅ PIN verified. Submitting your final guess...");
-        const result = await executeRanmiGuess(user, id, guessIndex);
-        if (result.success) {
-            await sendMessage(phone, `✅ Your guess has been submitted! We'll notify you of the result shortly.`);
-        } else {
-            await sendMessage(phone, `❌ Could not submit your guess. ${result.error || "Please try again."}`);
-        }
-    } catch (e) {
-        await sendMessage(phone, "❌ Guess submission failed due to a network or balance issue.");
-    } finally {
-        userStates.delete(phone);
-    }
+    const newState = {
+        ...state,
+        action: 'ranmi_guess',
+        successMessage: "✅ Your guess has been submitted! We'll notify you of the result shortly.",
+        failureMessage: "❌ Could not submit your guess. Please try again.",
+        execute: () => executeRanmiGuess(user, id, guessIndex),
+    };
+    await handlePinVerification(phone, pin, newState);
 }
 
 async function executeRanmiGuess(user, id, guessIndex) {
