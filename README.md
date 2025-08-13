@@ -2,6 +2,10 @@
 
 Mort is a revolutionary portfolio management bot that brings cryptocurrency to the world's most popular messaging app: WhatsApp. It allows users to seamlessly send, receive, and earn crypto with the same ease as sending a text message. By removing the barriers of complex apps and wallet setups, Mort makes crypto accessible, intuitive, and fun for everyone.
 
+## Live Demo
+
+Try Mort instantly on WhatsApp: [https://wa.me/message/NZE2L3J66OL4D1](https://wa.me/message/NZE2L3J66OL4D1)
+
 ## The Problem We Solve
 
 The mass adoption of cryptocurrency is hindered by significant friction. New users are often intimidated by:
@@ -109,3 +113,4 @@ The bot and the relayer service run from the same application.
 ## Our Vision
 
 Our vision is to make crypto so easy, anyone can use it on WhatsApp. We're removing technical barriers to open the digital economy for all.
+
