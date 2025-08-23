@@ -20,7 +20,7 @@ Mort tackles these problems head-on by leveraging an application that billions o
 
 <div align="center">
   <b>POV: newbies in crypto</b>
-  
+  <br>
   <img src="https://media.tenor.com/8cOzOoLR1UoAAAAM/houmlander.gif" alt="Crypto Newbie">
 </div>
 
@@ -46,6 +46,8 @@ Send crypto to your friends using their username or wallet address - as easy as 
 ### 🎲 Coin Flip Game
 Test your luck with our provably fair coin flip game - choose heads or tails, place your bet, and watch the magic happen on-chain<br>
 <img src="bot/images/photo_2025-08-23_17-36-00.jpg" alt="Coin Flip Game Start" width="300"> <img src="bot/images/photo_2025-08-23_17-36-05.jpg" alt="Coin Flip Bet" width="300"> <img src="bot/images/photo_2025-08-23_17-36-08.jpg" alt="Coin Flip Result" width="300">
+
+> **Note:** PIN will be masked on production using Whatsapp payment api
 
 ### ✌️ Rock Paper Scissors
 Challenge the computer to a game of Rock Paper Scissors with provably fair outcomes - choose rock 👊, paper ✋, or scissors ✌️ and let Chainlink VRF determine the winner <br> <img src="bot/images/photo_2025-08-23_17-36-20.jpg" alt="RPS Game Start" width="300"> <img src="bot/images/photo_2025-08-23_17-36-23.jpg" alt="RPS Game Play" width="300"> <img src="bot/images/photo_2025-08-23_17-36-26.jpg" alt="RPS Result" width="300">
@@ -144,8 +146,8 @@ The bot and the relayer service run from the same application.
 
 Our vision is to make crypto so easy, anyone can use it on WhatsApp. We're removing technical barriers to open the digital economy for all.
 
-<div align="center">
-  <h3>Learn More About Our Vision</h3>
+<div align="left">
+  <h5>Learn More About Our Vision</h5>
   
   [![Mort Vision](https://img.youtube.com/vi/wgLHYpvrwqM/maxresdefault.jpg)](https://youtu.be/wgLHYpvrwqM)
 </div>
