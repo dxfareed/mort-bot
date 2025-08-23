@@ -30,11 +30,11 @@ export async function handleViewBalance(userPhoneNumber, user) {
         const publicClient = createPublicClient({ chain: morphHolesky, transport: http(config.morphRpcUrl) });
         const balance = await publicClient.getBalance({ address: user.wallet.primaryAddress });
         const user_bal = Number(formatEther(balance));
-        
+
         await sendMessage(userPhoneNumber, ` Wallet Balance\nETH: ${user_bal.toFixed(5)}
 $${(user_bal * price).toFixed(2)}`);
 
-        if (user_bal < 0.00001) {
+        if (user_bal < 0.0009) {
             await sendMessage(userPhoneNumber, "Your balance is low. We're sending you some more ETH to keep you playing!");
             await fundUser(user.wallet.primaryAddress, userPhoneNumber);
         }

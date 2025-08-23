@@ -1,10 +1,13 @@
 # Project Mort: The WhatsApp Crypto Companion
 
-Mort is a revolutionary portfolio management bot that brings cryptocurrency to the world's most popular messaging app: WhatsApp. It allows users to seamlessly send, receive, and earn crypto with the same ease as sending a text message. By removing the barriers of complex apps and wallet setups, Mort makes crypto accessible, intuitive, and fun for everyone.
+<div align="center">
+  <img src="bot/images/Banner (1).png" alt="Mort Banner">
+</div>
 
-## Live Demo
+Mort is a revolutionary portfolio management bot that brings cryptocurrency to the world's most popular messaging app: WhatsApp. It allows users to seamlessly send, receive, and earn crypto with the same ease as sending a text message. By removing the barriers of complex apps and wallet setups, Mort makes crypto accessible, intuitive, and fun for everyone. 
 
-Try Mort instantly on WhatsApp: [https://wa.me/message/NZE2L3J66OL4D1](https://wa.me/message/NZE2L3J66OL4D1)
+📱 Try Mort instantly on WhatsApp: [https://wa.me/message/NZE2L3J66OL4D1](https://wa.me/message/NZE2L3J66OL4D1)
+
 
 ## The Problem We Solve
 
@@ -15,6 +18,14 @@ The mass adoption of cryptocurrency is hindered by significant friction. New use
 
 Mort tackles these problems head-on by leveraging an application that billions of people already know and trust.
 
+<div align="center">
+  <b>POV: newbies in crypto</b>
+  
+  <img src="https://media.tenor.com/8cOzOoLR1UoAAAAM/houmlander.gif" alt="Crypto Newbie">
+</div>
+
+
+
 ## Key Features
 
 *   **Simple Interface:** The entire experience lives within WhatsApp, providing a native and familiar environment.
@@ -24,7 +35,26 @@ Mort tackles these problems head-on by leveraging an application that billions o
 
 ---
 
-## Technical Architecture & Innovation
+## Screenshots
+
+### 💼 Wallet & Portfolio Management
+Create your wallet, check balance, and manage your crypto assets directly in WhatsApp<br><img src="bot/images/photo_2025-08-23_17-45-55.jpg" alt="Mort Wallet Interface" width="300"> <img src="bot/images/photo_2025-08-23_17-45-57.jpg" alt="Mort Wallet Balance" width="300">
+
+### 💸 Send Crypto to Friends
+Send crypto to your friends using their username or wallet address - as easy as sending a message<br><img src="bot/images/photo_2025-08-23_17-36-29.jpg" alt="Send Crypto Interface" width="300"> <img src="bot/images/photo_2025-08-23_17-36-32.jpg" alt="Send Crypto Confirmation" width="300">
+
+### 🎲 Coin Flip Game
+Test your luck with our provably fair coin flip game - choose heads or tails, place your bet, and watch the magic happen on-chain<br>
+<img src="bot/images/photo_2025-08-23_17-36-00.jpg" alt="Coin Flip Game Start" width="300"> <img src="bot/images/photo_2025-08-23_17-36-05.jpg" alt="Coin Flip Bet" width="300"> <img src="bot/images/photo_2025-08-23_17-36-08.jpg" alt="Coin Flip Result" width="300">
+
+### ✌️ Rock Paper Scissors
+Challenge the computer to a game of Rock Paper Scissors with provably fair outcomes - choose rock 👊, paper ✋, or scissors ✌️ and let Chainlink VRF determine the winner <br> <img src="bot/images/photo_2025-08-23_17-36-20.jpg" alt="RPS Game Start" width="300"> <img src="bot/images/photo_2025-08-23_17-36-23.jpg" alt="RPS Game Play" width="300"> <img src="bot/images/photo_2025-08-23_17-36-26.jpg" alt="RPS Result" width="300">
+
+### 🎮 Ranmi
+Test your luck in this unique number guessing game - we'll generate 5 numbers and if you can guess the winning one, you win big! All outcomes are provably fair through Chainlink VRF <br> <img src="bot/images/photo_2025-08-23_17-36-11.jpg" alt="Ranmi Game Start" width="300"> <img src="bot/images/photo_2025-08-23_17-36-14.jpg" alt="Ranmi Numbers" width="300"> <img src="bot/images/photo_2025-08-23_17-36-17.jpg" alt="Ranmi Result" width="300">
+
+
+## Technical Architecture & Innovation 🛠️
 
 Mort's architecture is designed for a seamless user experience on the frontend and a robust, innovative solution on the backend.
 
@@ -48,7 +78,7 @@ This innovative relayer architecture allows us to provide mathematically verifia
 
 ---
 
-## Getting Started
+## Getting Started  🚀 
 
 The project is divided into two main parts: the `contracts` and the `bot`.
 
@@ -113,4 +143,10 @@ The bot and the relayer service run from the same application.
 ## Our Vision
 
 Our vision is to make crypto so easy, anyone can use it on WhatsApp. We're removing technical barriers to open the digital economy for all.
+
+<div align="center">
+  <h3>Learn More About Our Vision</h3>
+  
+  [![Mort Vision](https://img.youtube.com/vi/wgLHYpvrwqM/maxresdefault.jpg)](https://youtu.be/wgLHYpvrwqM)
+</div>
 

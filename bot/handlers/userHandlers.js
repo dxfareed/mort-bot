@@ -1,6 +1,6 @@
 import { sendMessage } from "../services/whatsappService.js";
 import { checkUsernameExists, createUserInDatabase } from "../services/databaseService.js";
-import { createWalletForUser, fundUser } from "../services/web3Service.js";
+import { createWalletForUser,  } from "../services/web3Service.js";
 import { hashPin } from "../utils/security.js";
 import { registrationStates } from "../index.js";
 import { sendWelcomeBackMessage, sendNewUserWelcomeMessage } from "../services/whatsappService.js";
