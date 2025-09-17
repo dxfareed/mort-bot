@@ -58,7 +58,7 @@ export async function sendNewUserWelcomeMessage(to) {
             header: { type: "text", text: "🚀 Welcome to Mort" },
             body: { text: "Hello! I'm Morty, your personal Web3 agent on WhatsApp.\n\nHere's what you can do:\n• 💸 Send & receive crypto\n• 🎮 Play on-chain games to earn\n• 🔐 Securely manage your wallet\n\nTap below to create your free, secure wallet in seconds." },
             footer: { text: "Secure • Fast • Easy" },
-            action: { buttons: [{ type: "reply", reply: { id: "create_account", title: "Create Secure Wallet" } }] }
+            action: { buttons: [{ type: "reply", reply: { id: "create_account", title: "Create account" } }] }
         }
     };
     await sendApiRequest(data, `✅ New user welcome message sent to: ${to}`);
